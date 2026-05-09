@@ -4,7 +4,7 @@ import yfinance as yf
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
-from .stockstats_utils import yf_retry
+from .stockstats_utils import yf_retry, get_cached_text
 
 
 def _extract_article_data(article: dict) -> dict:
@@ -64,9 +64,22 @@ def get_news_yfinance(
     Returns:
         Formatted string containing news articles
     """
+    cache_payload = {"ticker": ticker.upper(), "start_date": start_date, "end_date": end_date}
+    return get_cached_text("news", cache_payload, lambda: _get_news_yfinance_uncached(ticker, start_date, end_date))
+
+
+def _get_news_yfinance_uncached(
+    ticker: str,
+    start_date: str,
+    end_date: str,
+) -> str:
     try:
         stock = yf.Ticker(ticker)
-        news = yf_retry(lambda: stock.get_news(count=20))
+        news = yf_retry(
+            lambda: stock.get_news(count=20),
+            request_name="stock_get_news",
+            request_meta={"ticker": ticker.upper(), "count": 20, "start": start_date, "end": end_date},
+        )
 
         if not news:
             return f"No news found for {ticker}"
@@ -120,24 +133,36 @@ def get_global_news_yfinance(
     Returns:
         Formatted string containing global news articles
     """
-    # Search queries for macro/global news
-    search_queries = [
-        "stock market economy",
-        "Federal Reserve interest rates",
-        "inflation economic outlook",
-        "global markets trading",
-    ]
+    cache_payload = {"curr_date": curr_date, "look_back_days": look_back_days, "limit": limit}
+    return get_cached_text("global_news", cache_payload, lambda: _get_global_news_yfinance_uncached(curr_date, look_back_days, limit))
 
-    all_news = []
-    seen_titles = set()
 
+def _get_global_news_yfinance_uncached(
+    curr_date: str,
+    look_back_days: int = 7,
+    limit: int = 10,
+) -> str:
     try:
+        search_queries = [
+            "stock market economy",
+            "Federal Reserve interest rates",
+            "inflation economic outlook",
+            "global markets trading",
+        ]
+
+        all_news = []
+        seen_titles = set()
+
         for query in search_queries:
-            search = yf_retry(lambda q=query: yf.Search(
-                query=q,
-                news_count=limit,
-                enable_fuzzy_query=True,
-            ))
+            search = yf_retry(
+                lambda q=query: yf.Search(
+                    query=q,
+                    news_count=limit,
+                    enable_fuzzy_query=True,
+                ),
+                request_name="global_search_news",
+                request_meta={"query": query, "limit": limit, "curr_date": curr_date},
+            )
 
             if search.news:
                 for article in search.news:

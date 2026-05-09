@@ -4,12 +4,36 @@ from dateutil.relativedelta import relativedelta
 import pandas as pd
 import yfinance as yf
 import os
-from .stockstats_utils import StockstatsUtils, _clean_dataframe, yf_retry, load_ohlcv, filter_financials_by_date
+from .stockstats_utils import (
+    StockstatsUtils,
+    _clean_dataframe,
+    yf_retry,
+    load_ohlcv,
+    filter_financials_by_date,
+    get_cached_text,
+)
 
 def get_YFin_data_online(
     symbol: Annotated[str, "ticker symbol of the company"],
     start_date: Annotated[str, "Start date in yyyy-mm-dd format"],
     end_date: Annotated[str, "End date in yyyy-mm-dd format"],
+):
+    cache_payload = {
+        "symbol": symbol.upper(),
+        "start_date": start_date,
+        "end_date": end_date,
+    }
+    return get_cached_text(
+        "stock_data",
+        cache_payload,
+        lambda: _get_YFin_data_online_uncached(symbol, start_date, end_date),
+    )
+
+
+def _get_YFin_data_online_uncached(
+    symbol: str,
+    start_date: str,
+    end_date: str,
 ):
 
     datetime.strptime(start_date, "%Y-%m-%d")
@@ -19,7 +43,11 @@ def get_YFin_data_online(
     ticker = yf.Ticker(symbol.upper())
 
     # Fetch historical data for the specified date range
-    data = yf_retry(lambda: ticker.history(start=start_date, end=end_date))
+    data = yf_retry(
+        lambda: ticker.history(start=start_date, end=end_date),
+        request_name="history",
+        request_meta={"symbol": symbol.upper(), "start": start_date, "end": end_date},
+    )
 
     # Check if data is empty
     if data.empty:
@@ -250,9 +278,21 @@ def get_fundamentals(
     curr_date: Annotated[str, "current date (not used for yfinance)"] = None
 ):
     """Get company fundamentals overview from yfinance."""
+    cache_payload = {"ticker": ticker.upper(), "curr_date": curr_date}
+    return get_cached_text("fundamentals", cache_payload, lambda: _get_fundamentals_uncached(ticker, curr_date))
+
+
+def _get_fundamentals_uncached(
+    ticker: str,
+    curr_date: str = None,
+):
     try:
         ticker_obj = yf.Ticker(ticker.upper())
-        info = yf_retry(lambda: ticker_obj.info)
+        info = yf_retry(
+            lambda: ticker_obj.info,
+            request_name="info",
+            request_meta={"ticker": ticker.upper()},
+        )
 
         if not info:
             return f"No fundamentals data found for symbol '{ticker}'"
@@ -308,13 +348,30 @@ def get_balance_sheet(
     curr_date: Annotated[str, "current date in YYYY-MM-DD format"] = None
 ):
     """Get balance sheet data from yfinance."""
+    cache_payload = {"ticker": ticker.upper(), "freq": freq, "curr_date": curr_date}
+    return get_cached_text("balance_sheet", cache_payload, lambda: _get_balance_sheet_uncached(ticker, freq, curr_date))
+
+
+def _get_balance_sheet_uncached(
+    ticker: str,
+    freq: str = "quarterly",
+    curr_date: str = None,
+):
     try:
         ticker_obj = yf.Ticker(ticker.upper())
 
         if freq.lower() == "quarterly":
-            data = yf_retry(lambda: ticker_obj.quarterly_balance_sheet)
+            data = yf_retry(
+                lambda: ticker_obj.quarterly_balance_sheet,
+                request_name="quarterly_balance_sheet",
+                request_meta={"ticker": ticker.upper(), "freq": "quarterly"},
+            )
         else:
-            data = yf_retry(lambda: ticker_obj.balance_sheet)
+            data = yf_retry(
+                lambda: ticker_obj.balance_sheet,
+                request_name="balance_sheet",
+                request_meta={"ticker": ticker.upper(), "freq": "annual"},
+            )
 
         data = filter_financials_by_date(data, curr_date)
 
@@ -340,13 +397,30 @@ def get_cashflow(
     curr_date: Annotated[str, "current date in YYYY-MM-DD format"] = None
 ):
     """Get cash flow data from yfinance."""
+    cache_payload = {"ticker": ticker.upper(), "freq": freq, "curr_date": curr_date}
+    return get_cached_text("cashflow", cache_payload, lambda: _get_cashflow_uncached(ticker, freq, curr_date))
+
+
+def _get_cashflow_uncached(
+    ticker: str,
+    freq: str = "quarterly",
+    curr_date: str = None,
+):
     try:
         ticker_obj = yf.Ticker(ticker.upper())
 
         if freq.lower() == "quarterly":
-            data = yf_retry(lambda: ticker_obj.quarterly_cashflow)
+            data = yf_retry(
+                lambda: ticker_obj.quarterly_cashflow,
+                request_name="quarterly_cashflow",
+                request_meta={"ticker": ticker.upper(), "freq": "quarterly"},
+            )
         else:
-            data = yf_retry(lambda: ticker_obj.cashflow)
+            data = yf_retry(
+                lambda: ticker_obj.cashflow,
+                request_name="cashflow",
+                request_meta={"ticker": ticker.upper(), "freq": "annual"},
+            )
 
         data = filter_financials_by_date(data, curr_date)
 
@@ -372,13 +446,30 @@ def get_income_statement(
     curr_date: Annotated[str, "current date in YYYY-MM-DD format"] = None
 ):
     """Get income statement data from yfinance."""
+    cache_payload = {"ticker": ticker.upper(), "freq": freq, "curr_date": curr_date}
+    return get_cached_text("income_statement", cache_payload, lambda: _get_income_statement_uncached(ticker, freq, curr_date))
+
+
+def _get_income_statement_uncached(
+    ticker: str,
+    freq: str = "quarterly",
+    curr_date: str = None,
+):
     try:
         ticker_obj = yf.Ticker(ticker.upper())
 
         if freq.lower() == "quarterly":
-            data = yf_retry(lambda: ticker_obj.quarterly_income_stmt)
+            data = yf_retry(
+                lambda: ticker_obj.quarterly_income_stmt,
+                request_name="quarterly_income_stmt",
+                request_meta={"ticker": ticker.upper(), "freq": "quarterly"},
+            )
         else:
-            data = yf_retry(lambda: ticker_obj.income_stmt)
+            data = yf_retry(
+                lambda: ticker_obj.income_stmt,
+                request_name="income_stmt",
+                request_meta={"ticker": ticker.upper(), "freq": "annual"},
+            )
 
         data = filter_financials_by_date(data, curr_date)
 
@@ -402,9 +493,18 @@ def get_insider_transactions(
     ticker: Annotated[str, "ticker symbol of the company"]
 ):
     """Get insider transactions data from yfinance."""
+    cache_payload = {"ticker": ticker.upper()}
+    return get_cached_text("insider_transactions", cache_payload, lambda: _get_insider_transactions_uncached(ticker))
+
+
+def _get_insider_transactions_uncached(ticker: str):
     try:
         ticker_obj = yf.Ticker(ticker.upper())
-        data = yf_retry(lambda: ticker_obj.insider_transactions)
+        data = yf_retry(
+            lambda: ticker_obj.insider_transactions,
+            request_name="insider_transactions",
+            request_meta={"ticker": ticker.upper()},
+        )
         
         if data is None or data.empty:
             return f"No insider transactions data found for symbol '{ticker}'"
