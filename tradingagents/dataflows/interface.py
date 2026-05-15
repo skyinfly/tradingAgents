@@ -32,6 +32,9 @@ from .akshare_data import (
     get_news_akshare,
     get_global_news_akshare,
     get_insider_transactions_akshare,
+    get_realtime_quote_akshare,
+    get_intraday_minute_bars_akshare,
+    get_today_fund_flow_rank_akshare,
 )
 from tools.sector_data.akshare_sector import (
     get_market_sectors_akshare,
@@ -84,6 +87,14 @@ TOOLS_CATEGORIES = {
             "get_sector_constituents",
             "get_sector_stocks_fund_flow",
             "get_stock_prev_day_fund_flow",
+        ],
+    },
+    "intraday_data": {
+        "description": "Realtime intraday quotes / minute bars / today fund flow rank (A-share only)",
+        "tools": [
+            "get_realtime_quote",
+            "get_intraday_minute_bars",
+            "get_today_fund_flow_rank",
         ],
     }
 }
@@ -160,6 +171,16 @@ VENDOR_METHODS = {
     },
     "get_stock_prev_day_fund_flow": {
         "akshare": get_stock_prev_day_fund_flow_akshare,
+    },
+    # intraday_data
+    "get_realtime_quote": {
+        "akshare": get_realtime_quote_akshare,
+    },
+    "get_intraday_minute_bars": {
+        "akshare": get_intraday_minute_bars_akshare,
+    },
+    "get_today_fund_flow_rank": {
+        "akshare": get_today_fund_flow_rank_akshare,
     },
 }
 

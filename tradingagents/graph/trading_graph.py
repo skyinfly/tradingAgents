@@ -30,7 +30,10 @@ from tradingagents.agents.utils.agent_utils import (
     get_income_statement,
     get_news,
     get_insider_transactions,
-    get_global_news
+    get_global_news,
+    get_realtime_quote,
+    get_intraday_minute_bars,
+    get_today_fund_flow_rank,
 )
 
 from .conditional_logic import ConditionalLogic
@@ -38,6 +41,41 @@ from .setup import GraphSetup
 from .propagation import Propagator
 from .reflection import Reflector
 from .signal_processing import SignalProcessor
+
+
+# 智能体英文标识 → 中文展示名映射，统一 debug 日志输出
+_AGENT_ROLE_CN = {
+    "Market Analyst": "市场分析师",
+    "Social Media Analyst": "社交媒体分析师",
+    "Social Analyst": "社交媒体分析师",
+    "News Analyst": "新闻分析师",
+    "Fundamentals Analyst": "基本面分析师",
+    "Intraday Analyst": "盘中分析师",
+    "Bull Researcher": "多头研究员",
+    "Bull Analyst": "多头研究员",
+    "Bear Researcher": "空头研究员",
+    "Bear Analyst": "空头研究员",
+    "Research Manager": "研究经理",
+    "Trader": "交易员",
+    "Aggressive": "激进风险分析师",
+    "Aggressive Analyst": "激进风险分析师",
+    "Risky Analyst": "激进风险分析师",
+    "Conservative": "保守风险分析师",
+    "Conservative Analyst": "保守风险分析师",
+    "Safe Analyst": "保守风险分析师",
+    "Neutral": "中性风险分析师",
+    "Neutral Analyst": "中性风险分析师",
+    "Judge": "投资组合经理",
+    "Portfolio Manager": "投资组合经理",
+    "Unknown": "未知角色",
+}
+
+
+def to_cn_role(role: str) -> str:
+    """把英文角色名翻译成中文展示名；未识别时原样返回。"""
+    if not role:
+        return "未知角色"
+    return _AGENT_ROLE_CN.get(role, role)
 
 
 class TradingAgentsGraph:
@@ -189,6 +227,14 @@ class TradingAgentsGraph:
                     get_income_statement,
                 ]
             ),
+            "intraday": ToolNode(
+                [
+                    # 盘中实时数据工具（A 股专用）
+                    get_realtime_quote,
+                    get_intraday_minute_bars,
+                    get_today_fund_flow_rank,
+                ]
+            ),
         }
 
     def propagate(self, company_name, trade_date):
@@ -203,18 +249,43 @@ class TradingAgentsGraph:
         args = self.propagator.get_graph_args()
 
         if self.debug:
-            # 带追踪信息的调试模式
-            trace = []
-            for chunk in self.graph.stream(init_agent_state, **args):
-                if len(chunk["messages"]) == 0:
-                    pass
-                else:
-                    sender = self._resolve_debug_sender(chunk)
-                    print(f"================================== Ai {sender} Message ==================================")
-                    chunk["messages"][-1].pretty_print()
-                    trace.append(chunk)
+            # 调试模式：updates 流定位发言节点，values 流保留完整 state
+            debug_args = dict(args)
+            debug_args["stream_mode"] = ["updates", "values"]
 
-            final_state = trace[-1]
+            final_state = None
+            last_print_key = None  # (节点名, 最后一条消息 id) 防同节点重复打印
+
+            for mode, payload in self.graph.stream(init_agent_state, **debug_args):
+                if mode == "values":
+                    final_state = payload
+                    continue
+
+                # mode == "updates"，payload 形如 {节点名: state_delta}
+                if not isinstance(payload, dict):
+                    continue
+                for node_name, delta in payload.items():
+                    # 过滤辅助节点（消息清理、工具调用本体）
+                    if node_name.startswith("Msg Clear") or node_name.startswith("tools_"):
+                        continue
+                    if not isinstance(delta, dict):
+                        continue
+                    msgs = delta.get("messages") or []
+                    if not msgs:
+                        continue
+                    last_msg = msgs[-1]
+                    msg_id = getattr(last_msg, "id", None) or id(last_msg)
+                    key = (node_name, msg_id)
+                    if key == last_print_key:
+                        continue
+                    last_print_key = key
+                    sender_cn = to_cn_role(node_name)
+                    print(f"\n========== 【{sender_cn}】输出 ==========")
+                    last_msg.pretty_print()
+
+            if final_state is None:
+                # 极端情况下没有 values 帧，回落到 invoke
+                final_state = self.graph.invoke(init_agent_state, **args)
         else:
             # 不带追踪信息的标准模式
             final_state = self.graph.invoke(init_agent_state, **args)
@@ -229,7 +300,7 @@ class TradingAgentsGraph:
         return final_state, self.process_signal(final_state["final_trade_decision"])
 
     def _resolve_debug_sender(self, chunk) -> str:
-        """Resolve the best-effort role label for debug streaming output."""
+        """为 debug 流式输出尽力识别当前角色标签（仍返回英文，外层做中文映射）。"""
         sender = chunk.get("sender")
         if sender:
             return sender
