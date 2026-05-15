@@ -33,6 +33,13 @@ from .akshare_data import (
     get_global_news_akshare,
     get_insider_transactions_akshare,
 )
+from tools.sector_data.akshare_sector import (
+    get_market_sectors_akshare,
+    get_sector_fund_flow_akshare,
+    get_sector_constituents_akshare,
+    get_sector_stocks_fund_flow_akshare,
+    get_stock_prev_day_fund_flow_akshare,
+)
 from .alpha_vantage_common import AlphaVantageRateLimitError
 
 # Configuration and routing logic
@@ -68,6 +75,16 @@ TOOLS_CATEGORIES = {
             "get_global_news",
             "get_insider_transactions",
         ]
+    },
+    "sector_data": {
+        "description": "Market sectors and sector-level fund flow",
+        "tools": [
+            "get_market_sectors",
+            "get_sector_fund_flow",
+            "get_sector_constituents",
+            "get_sector_stocks_fund_flow",
+            "get_stock_prev_day_fund_flow",
+        ],
     }
 }
 
@@ -127,6 +144,22 @@ VENDOR_METHODS = {
         "alpha_vantage": get_alpha_vantage_insider_transactions,
         "yfinance": get_yfinance_insider_transactions,
         "akshare": get_insider_transactions_akshare,
+    },
+    # sector_data
+    "get_market_sectors": {
+        "akshare": get_market_sectors_akshare,
+    },
+    "get_sector_fund_flow": {
+        "akshare": get_sector_fund_flow_akshare,
+    },
+    "get_sector_constituents": {
+        "akshare": get_sector_constituents_akshare,
+    },
+    "get_sector_stocks_fund_flow": {
+        "akshare": get_sector_stocks_fund_flow_akshare,
+    },
+    "get_stock_prev_day_fund_flow": {
+        "akshare": get_stock_prev_day_fund_flow_akshare,
     },
 }
 
